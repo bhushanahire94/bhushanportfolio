@@ -1,0 +1,81 @@
+# GitLab CI/CD configuration for building and deploying a React (Vite) app using Docker
+
+stages:
+  - install
+  - build
+  - dockerize
+  - deploy
+
+variables:
+  NODE_ENV: production
+  # Docker image name (replace with your GitLab container registry path)
+  IMAGE_NAME: $CI_REGISTRY_IMAGE/bhushanportfolio
+
+# 1️⃣ Install dependencies and cache node_modules for faster builds
+install_dependencies:
+  stage: install
+  image: node:20-alpine
+  script:
+    - echo "Installing dependencies..."
+    - npm ci
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}
+    paths:
+      - node_modules/
+  artifacts:
+    paths:
+      - node_modules/
+  only:
+    - main
+
+# 2️⃣ Build the React (Vite) app
+build_app:
+  stage: build
+  image: node:20-alpine
+  script:
+    - echo "Building the Vite app..."
+    - npm run build
+  artifacts:
+    paths:
+      - dist/
+  only:
+    - main
+  dependencies:
+    - install_dependencies
+
+# 3️⃣ Build and push the Docker image to GitLab Container Registry
+docker_build:
+  stage: dockerize
+  image: docker:latest
+  services:
+    - docker:dind
+  script:
+    - echo "Logging into GitLab Container Registry..."
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - echo "Building Docker image..."
+    - docker build -t $IMAGE_NAME:$CI_COMMIT_SHORT_SHA .
+    - echo "Pushing image to registry..."
+    - docker push $IMAGE_NAME:$CI_COMMIT_SHORT_SHA
+    - docker tag $IMAGE_NAME:$CI_COMMIT_SHORT_SHA $IMAGE_NAME:latest
+    - docker push $IMAGE_NAME:latest
+  only:
+    - main
+  dependencies:
+    - build_app
+
+# 4️⃣ Optional: Deploy stage (example — customize for your environment)
+deploy_production:
+  stage: deploy
+  image: alpine:latest
+  script:
+    - echo "Deploying Docker image to production..."
+    # Example: SSH to server and pull latest image
+    # apk add --no-cache openssh-client
+    # ssh -o StrictHostKeyChecking=no user@your-server "
+    #   docker pull $IMAGE_NAME:latest &&
+    #   docker stop portfolio || true &&
+    #   docker rm portfolio || true &&  
+    #   docker run -d -p 80:80 --name portfolio $IMAGE_NAME:latest
+    # "
+  only:
+    - main
